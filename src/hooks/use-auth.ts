@@ -127,6 +127,20 @@ export function useAuth() {
     }
   };
 
+  const updateUser = async (user: User) => {
+    try {
+      await Storage.setItem('auth_user', JSON.stringify(user));
+      currentAuthState = {
+        ...currentAuthState,
+        user,
+        username: user.username,
+      };
+      notifySubscribers();
+    } catch (e) {
+      console.error('Error updating user storage:', e);
+    }
+  };
+
   return {
     isAuthenticated: state.isAuthenticated,
     username: state.username,
@@ -135,5 +149,6 @@ export function useAuth() {
     isLoading: state.isLoading,
     login,
     logout,
+    updateUser,
   };
 }

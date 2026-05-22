@@ -1,41 +1,81 @@
 <?php
 class Database {
-    private $host = "127.0.0.1";
-    private $db_name = "home";
-    private $username = "root";
-    private $password = "";
+    private $host = "sql210.infinityfree.com";
+    private $db_name = "if0_41989865_home";
+    private $username = "if0_41989865";
+    private $password = "Sujay2004";
     public $conn;
 
     // Get the database connection
     public function getConnection() {
         $this->conn = null;
 
-        try {
-            // Set options for safe, secure, and robust connection
-            $options = [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ];
-            
-            $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=utf8mb4",
-                $this->username,
-                $this->password,
-                $options
-            );
-        } catch (PDOException $exception) {
-            // If connection failed because database doesn't exist, we might want to connect to MySQL directly
-            // to allow database creation during setup.
-            throw $exception;
+        // Check if running on localhost/local network
+        $isLocal = false;
+        $serverName = $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? '';
+        
+        if ($serverName === 'localhost' || $serverName === '127.0.0.1' || 
+            strpos($httpHost, 'localhost') !== false || strpos($httpHost, '127.0.0.1') !== false ||
+            preg_match('/^(192\.168\.|10\.|172\.)/', $httpHost) || php_sapi_name() === 'cli') {
+            $isLocal = true;
         }
 
-        return $this->conn;
+        $host = $isLocal ? "127.0.0.1" : $this->host;
+        $username = $isLocal ? "root" : $this->username;
+        $password = $isLocal ? "" : $this->password;
+        
+        // Try these database names sequentially on local
+        $db_names = $isLocal ? ["home", "if0_41989865_home", "room_db", "if0_40337381_room_db"] : [$this->db_name];
+
+        
+        $last_exception = null;
+        foreach ($db_names as $db_name) {
+            try {
+                $options = [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ];
+                
+                $this->conn = new PDO(
+                    "mysql:host=" . $host . ";dbname=" . $db_name . ";charset=utf8mb4",
+                    $username,
+                    $password,
+                    $options
+                );
+                return $this->conn;
+            } catch (PDOException $exception) {
+                $last_exception = $exception;
+                // Try next database name if local
+            }
+        }
+
+        if ($last_exception) {
+            throw $last_exception;
+        }
+
+        return null;
     }
 
     // Special connection method for administrative tasks (like creating the database)
-    Public function getSystemConnection() {
+    public function getSystemConnection() {
         $this->conn = null;
+
+        // Check if running on localhost/local network
+        $isLocal = false;
+        $serverName = $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? '';
+        
+        if ($serverName === 'localhost' || $serverName === '127.0.0.1' || 
+            strpos($httpHost, 'localhost') !== false || strpos($httpHost, '127.0.0.1') !== false ||
+            preg_match('/^(192\.168\.|10\.|172\.)/', $httpHost) || php_sapi_name() === 'cli') {
+            $isLocal = true;
+        }
+
+        $host = $isLocal ? "127.0.0.1" : $this->host;
+        $username = $isLocal ? "root" : $this->username;
+        $password = $isLocal ? "" : $this->password;
 
         try {
             $options = [
@@ -46,9 +86,9 @@ class Database {
 
             // Connect without database name so we can create it
             $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";charset=utf8mb4",
-                $this->username,
-                $this->password,
+                "mysql:host=" . $host . ";charset=utf8mb4",
+                $username,
+                $password,
                 $options
             );
         } catch (PDOException $exception) {

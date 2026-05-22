@@ -1,0 +1,10 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Do not rewrite if the requested resource is an existing file or directory
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    
+    # Forward all other requests to index.php
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>

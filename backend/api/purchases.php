@@ -22,11 +22,12 @@ try {
         $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
         $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
-        // Fetch purchases for the selected month and year ordered by date (newest first, excluding admin)
-        $query = "SELECT id, user_id, username, product, price, purchase_date FROM purchases 
-                  WHERE MONTH(purchase_date) = :month AND YEAR(purchase_date) = :year 
-                    AND LOWER(TRIM(username)) != 'admin'
-                  ORDER BY purchase_date DESC";
+        // Fetch purchases for the selected month and year ordered by date (newest first, excluding admin) with user avatar
+        $query = "SELECT p.id, p.user_id, p.username, p.product, p.price, p.purchase_date, u.avatar FROM purchases p 
+                  LEFT JOIN users u ON p.user_id = u.id OR LOWER(TRIM(p.username)) = LOWER(TRIM(u.username))
+                  WHERE MONTH(p.purchase_date) = :month AND YEAR(p.purchase_date) = :year 
+                    AND LOWER(TRIM(p.username)) != 'admin'
+                  ORDER BY p.purchase_date DESC";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':month', $month, PDO::PARAM_INT);
         $stmt->bindParam(':year', $year, PDO::PARAM_INT);
@@ -40,7 +41,8 @@ try {
                 "username" => $row['username'],
                 "product" => $row['product'],
                 "price" => (float)$row['price'],
-                "purchase_date" => $row['purchase_date']
+                "purchase_date" => $row['purchase_date'],
+                "avatar" => $row['avatar']
             ];
         }
 

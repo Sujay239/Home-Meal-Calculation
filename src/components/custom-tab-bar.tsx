@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Text, Platform, Modal, TextInput, KeyboardAvoidingView, Alert } from 'react-native';
+import { View, StyleSheet, Pressable, Text, Platform, Modal, TextInput, KeyboardAvoidingView, Alert, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/use-theme';
@@ -9,25 +9,12 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { notifyPurchaseAdded } from '@/hooks/use-shared-data';
 import { useAuth } from '@/hooks/use-auth';
 import Constants from 'expo-constants';
+import { purchaseService } from '@/services/api';
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { username, token } = useAuth();
-
-  const getBaseUrl = () => {
-    let host = '10.229.201.77';
-    if (Platform.OS === 'web') {
-      host = 'localhost';
-    } else {
-      const hostUri = Constants.expoConfig?.hostUri || '';
-      const uriHost = hostUri.split(':')[0];
-      if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-        host = uriHost;
-      }
-    }
-    return `http://${host}:8000`;
-  };
+  const { username, token, user } = useAuth();
 
   const [cartModalVisible, setCartModalVisible] = useState(false);
   const [itemName, setItemName] = useState('');
@@ -36,9 +23,30 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const [isAmountFocused, setIsAmountFocused] = useState(false);
 
   const handleCartSubmit = async () => {
-    if (!itemName.trim() || !itemAmount.trim()) return;
-    const amountNum = parseFloat(itemAmount);
-    if (isNaN(amountNum) || amountNum <= 0) return;
+    const trimmedName = itemName.trim();
+    if (!trimmedName) {
+      Alert.alert('Error', 'Please enter an item name.');
+      return;
+    }
+
+    // Validate English language: letters, numbers, spaces, and basic punctuation
+    const englishRegex = /^[A-Za-z0-9\s.,'()\-&!#]+$/;
+    if (!englishRegex.test(trimmedName)) {
+      Alert.alert('Not Supported', 'Only English characters are supported for the item name.');
+      return;
+    }
+
+    const trimmedAmount = itemAmount.trim();
+    if (!trimmedAmount) {
+      Alert.alert('Error', 'Please enter an amount.');
+      return;
+    }
+
+    const amountNum = parseFloat(trimmedAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      Alert.alert('Error', 'Amount must be a positive number.');
+      return;
+    }
 
     if (!token) {
       Alert.alert('Error', 'You must be logged in to log a purchase.');
@@ -46,22 +54,13 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     }
 
     try {
-      const baseUrl = getBaseUrl();
-      const response = await fetch(`${baseUrl}/backend/api/purchases.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          username: username || 'Sujay',
-          product: itemName.trim(),
-          price: amountNum,
-        }),
+      const data = await purchaseService.logPurchase({
+        username: username || 'Sujay',
+        product: trimmedName,
+        price: amountNum,
       });
 
-      const data = await response.json();
-      if (response.ok && data.success) {
+      if (data.success) {
         notifyPurchaseAdded();
         setItemName('');
         setItemAmount('');
@@ -69,9 +68,9 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       } else {
         Alert.alert('Error', data.message || 'Failed to save purchase.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save purchase error:', err);
-      Alert.alert('Error', 'Cannot connect to server. Please try again.');
+      Alert.alert('Error', err.message || 'Cannot connect to server. Please try again.');
     }
   };
 
@@ -177,6 +176,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
           );
         }
 
+        const isAccountTab = route.name === 'account';
+
         return (
           <Animated.View key={route.key} style={[styles.tabButton, animatedStyle]}>
             <Pressable
@@ -186,11 +187,21 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               onPressOut={handlePressOut}
               style={styles.tabPressable}
             >
-              <MaterialIcons
-                name={iconName}
-                size={22}
-                color={isFocused ? '#2ed573' : theme.textSecondary}
-              />
+              {isAccountTab && user?.avatar ? (
+                <Image
+                  source={{ uri: user.avatar }}
+                  style={[
+                    styles.tabAvatarImg,
+                    { borderColor: isFocused ? '#2ed573' : 'transparent' }
+                  ]}
+                />
+              ) : (
+                <MaterialIcons
+                  name={iconName}
+                  size={22}
+                  color={isFocused ? '#2ed573' : theme.textSecondary}
+                />
+              )}
               <Text
                 style={[
                   styles.label,
@@ -266,9 +277,20 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                     style={[styles.modalInput, { color: theme.text }]}
                     placeholder="e.g. 250"
                     placeholderTextColor={theme.textSecondary}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     value={itemAmount}
-                    onChangeText={setItemAmount}
+                    onChangeText={(text) => {
+                      // Filter out anything that is not a digit or a decimal point
+                      let cleanText = text.replace(/[^0-9.]/g, '');
+                      
+                      // Ensure there's at most one decimal point
+                      const parts = cleanText.split('.');
+                      if (parts.length > 2) {
+                        cleanText = parts[0] + '.' + parts[1];
+                      }
+                      
+                      setItemAmount(cleanText);
+                    }}
                     onFocus={() => setIsAmountFocused(true)}
                     onBlur={() => setIsAmountFocused(false)}
                   />
@@ -344,6 +366,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,
+  },
+  tabAvatarImg: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
   },
   cartContainer: {
     flex: 1,

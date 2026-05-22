@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Platform, Image } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { subscribeToPurchaseUpdates } from '@/hooks/use-shared-data';
 import Constants from 'expo-constants';
+import { purchaseService } from '@/services/api';
 
 // --- TYPES ---
 type Purchase = {
@@ -16,6 +17,7 @@ type Purchase = {
   product: string;
   price: number;
   date: Date;
+  avatar?: string | null;
 };
 
 // Color map for user avatars
@@ -29,20 +31,6 @@ const USER_COLORS: Record<string, string> = {
 };
 
 const getUserColor = (name: string) => USER_COLORS[name.toLowerCase().trim()] || '#64748b';
-
-const getBaseUrl = () => {
-  let host = '10.229.201.77';
-  if (Platform.OS === 'web') {
-    host = 'localhost';
-  } else {
-    const hostUri = Constants.expoConfig?.hostUri || '';
-    const uriHost = hostUri.split(':')[0];
-    if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-      host = uriHost;
-    }
-  }
-  return `http://${host}:8000`;
-};
 
 export default function PurchasesScreen() {
   const theme = useTheme();
@@ -74,31 +62,24 @@ export default function PurchasesScreen() {
     try {
       const month = currentDate.getMonth() + 1; // 1-indexed
       const year = currentDate.getFullYear();
-      const baseUrl = getBaseUrl();
 
-      const response = await fetch(`${baseUrl}/backend/api/purchases.php?month=${month}&year=${year}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await purchaseService.getPurchases({ month, year });
+      if (data.success) {
         const fetchedPurchases: Purchase[] = (data.purchases || []).map((p: any) => ({
           id: p.id,
           username: p.username,
           product: p.product,
           price: p.price,
           date: new Date(p.purchase_date.replace(' ', 'T')),
+          avatar: p.avatar,
         }));
         setPurchases(fetchedPurchases);
       } else {
         setFetchError(data.message || 'Failed to fetch purchases.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Fetch purchases error:', err);
-      setFetchError('Cannot connect to calculation server.');
+      setFetchError(err.message || 'Cannot connect to calculation server.');
     } finally {
       setIsLoading(false);
     }
@@ -118,10 +99,31 @@ export default function PurchasesScreen() {
     return unsubscribe;
   }, [token]);
 
+  // Create mapping of username -> avatar
+  const userAvatars = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    purchases.forEach(p => {
+      const key = p.username.toLowerCase().trim();
+      if (p.avatar && !map[key]) {
+        map[key] = p.avatar;
+      }
+    });
+    return map;
+  }, [purchases]);
+
   // Get unique usernames
   const uniqueUsers = useMemo(() => {
-    const names = new Set(purchases.map(p => p.username.trim()));
-    return ['All', ...Array.from(names)];
+    const seen = new Set<string>();
+    const names: string[] = [];
+    purchases.forEach(p => {
+      const trimmed = p.username.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed && !seen.has(lower)) {
+        seen.add(lower);
+        names.push(trimmed);
+      }
+    });
+    return ['All', ...names];
   }, [purchases]);
 
   const isCurrentMonth = () => {
@@ -211,6 +213,7 @@ export default function PurchasesScreen() {
               {uniqueUsers.map(user => {
                 const isActive = selectedUser.toLowerCase().trim() === user.toLowerCase().trim();
                 const chipColor = user === 'All' ? '#6366f1' : getUserColor(user);
+                const avatarUri = user === 'All' ? null : userAvatars[user.toLowerCase().trim()];
                 return (
                   <Pressable
                     key={user}
@@ -218,14 +221,20 @@ export default function PurchasesScreen() {
                     style={[styles.dropdownItem, isActive && { backgroundColor: chipColor + '18' }]}
                   >
                     <View style={styles.dropdownItemLeft}>
-                      {user !== 'All' ? (
-                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor }]}>
-                          <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                            {user.charAt(0).toUpperCase()}
-                          </ThemedText>
+                       {user !== 'All' ? (
+                        <View style={styles.dropdownAvatar}>
+                          {avatarUri ? (
+                            <Image source={{ uri: avatarUri }} style={styles.avatarImgSmall} />
+                          ) : (
+                            <View style={[styles.avatarFallbackSmall, { backgroundColor: chipColor }]}>
+                              <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                                {user.charAt(0).toUpperCase()}
+                              </ThemedText>
+                            </View>
+                          )}
                         </View>
                       ) : (
-                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor }]}>
+                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor, alignItems: 'center', justifyContent: 'center' }]}>
                           <MaterialIcons name="people" size={16} color="#fff" />
                         </View>
                       )}
@@ -312,10 +321,16 @@ export default function PurchasesScreen() {
                   {purchases.map((item, idx) => (
                     <View key={item.id}>
                       <View style={styles.purchaseRow}>
-                        <View style={[styles.purchaseAvatar, { backgroundColor: getUserColor(item.username) }]}>
-                          <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                            {item.username.charAt(0).toUpperCase()}
-                          </ThemedText>
+                        <View style={styles.purchaseAvatar}>
+                          {item.avatar ? (
+                            <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
+                          ) : (
+                            <View style={[styles.avatarFallback, { backgroundColor: getUserColor(item.username) }]}>
+                              <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                                {item.username.charAt(0).toUpperCase()}
+                              </ThemedText>
+                            </View>
+                          )}
                         </View>
                         <View style={styles.purchaseInfo}>
                           <ThemedText type="default" style={{ fontWeight: '600', color: theme.text, fontSize: 15 }}>
@@ -435,6 +450,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImgSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+  },
+  avatarFallbackSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     padding: 24,
@@ -501,6 +529,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   purchaseInfo: {
     flex: 1,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Platform, Image } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -7,12 +7,14 @@ import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import Constants from 'expo-constants';
+import { mealService } from '@/services/api';
 
 // --- TYPES ---
 type Meal = {
   id: number;
   username: string;
   date: Date;
+  avatar?: string | null;
 };
 
 // Color map for user avatars
@@ -33,20 +35,6 @@ const formatTimeSql = (date: Date) => {
   const min = pad(date.getMinutes());
   const s = pad(date.getSeconds());
   return `${h}:${min}:${s}`;
-};
-
-const getBaseUrl = () => {
-  let host = '10.229.201.77';
-  if (Platform.OS === 'web') {
-    host = 'localhost';
-  } else {
-    const hostUri = Constants.expoConfig?.hostUri || '';
-    const uriHost = hostUri.split(':')[0];
-    if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-      host = uriHost;
-    }
-  }
-  return `http://${host}:8000`;
 };
 
 export default function MealsScreen() {
@@ -79,29 +67,22 @@ export default function MealsScreen() {
     try {
       const month = currentDate.getMonth() + 1; // 1-indexed
       const year = currentDate.getFullYear();
-      const baseUrl = getBaseUrl();
       
-      const response = await fetch(`${baseUrl}/backend/api/meals.php?month=${month}&year=${year}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await mealService.getMeals({ month, year });
+      if (data.success) {
         const fetchedMeals: Meal[] = (data.meals || []).map((m: any) => ({
           id: m.id,
           username: m.username,
           date: new Date(m.meal_time.replace(' ', 'T')),
+          avatar: m.avatar,
         }));
         setMeals(fetchedMeals);
       } else {
         setFetchError(data.message || 'Failed to fetch meals.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Fetch meals error:', err);
-      setFetchError('Cannot connect to calculation server.');
+      setFetchError(err.message || 'Cannot connect to calculation server.');
     } finally {
       setIsLoading(false);
     }
@@ -113,10 +94,31 @@ export default function MealsScreen() {
     }
   }, [currentDate, token, isFocused]);
 
+  // Create mapping of username -> avatar
+  const userAvatars = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    meals.forEach(m => {
+      const key = m.username.toLowerCase().trim();
+      if (m.avatar && !map[key]) {
+        map[key] = m.avatar;
+      }
+    });
+    return map;
+  }, [meals]);
+
   // Get unique usernames
   const uniqueUsers = useMemo(() => {
-    const names = new Set(meals.map(m => m.username.trim()));
-    return ['All', ...Array.from(names)];
+    const seen = new Set<string>();
+    const names: string[] = [];
+    meals.forEach(m => {
+      const trimmed = m.username.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed && !seen.has(lower)) {
+        seen.add(lower);
+        names.push(trimmed);
+      }
+    });
+    return ['All', ...names];
   }, [meals]);
 
   const isCurrentMonth = () => {
@@ -201,6 +203,7 @@ export default function MealsScreen() {
               {uniqueUsers.map(user => {
                 const isActive = selectedUser.toLowerCase().trim() === user.toLowerCase().trim();
                 const chipColor = user === 'All' ? '#6366f1' : getUserColor(user);
+                const avatarUri = user === 'All' ? null : userAvatars[user.toLowerCase().trim()];
                 return (
                   <Pressable
                     key={user}
@@ -208,14 +211,20 @@ export default function MealsScreen() {
                     style={[styles.dropdownItem, isActive && { backgroundColor: chipColor + '18' }]}
                   >
                     <View style={styles.dropdownItemLeft}>
-                      {user !== 'All' ? (
-                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor }]}>
-                          <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                            {user.charAt(0).toUpperCase()}
-                          </ThemedText>
+                       {user !== 'All' ? (
+                        <View style={styles.dropdownAvatar}>
+                          {avatarUri ? (
+                            <Image source={{ uri: avatarUri }} style={styles.avatarImgSmall} />
+                          ) : (
+                            <View style={[styles.avatarFallbackSmall, { backgroundColor: chipColor }]}>
+                              <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                                {user.charAt(0).toUpperCase()}
+                              </ThemedText>
+                            </View>
+                          )}
                         </View>
                       ) : (
-                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor }]}>
+                        <View style={[styles.dropdownAvatar, { backgroundColor: chipColor, alignItems: 'center', justifyContent: 'center' }]}>
                           <MaterialIcons name="people" size={16} color="#fff" />
                         </View>
                       )}
@@ -277,10 +286,16 @@ export default function MealsScreen() {
                   {meals.map((item, idx) => (
                     <View key={item.id}>
                       <View style={styles.mealRow}>
-                        <View style={[styles.mealAvatar, { backgroundColor: getUserColor(item.username) }]}>
-                          <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                            {item.username.charAt(0).toUpperCase()}
-                          </ThemedText>
+                        <View style={styles.mealAvatar}>
+                          {item.avatar ? (
+                            <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
+                          ) : (
+                            <View style={[styles.avatarFallback, { backgroundColor: getUserColor(item.username) }]}>
+                              <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                                {item.username.charAt(0).toUpperCase()}
+                              </ThemedText>
+                            </View>
+                          )}
                         </View>
                         <View style={styles.mealInfo}>
                           <ThemedText type="default" style={{ fontWeight: '600', color: theme.text, fontSize: 15 }}>
@@ -397,6 +412,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImgSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+  },
+  avatarFallbackSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     padding: 24,
@@ -463,6 +491,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mealInfo: {
     flex: 1,

@@ -22,11 +22,12 @@ try {
         $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
         $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
-        // Fetch meals for the selected month and year ordered by date (newest first, excluding admin)
-        $query = "SELECT id, user_id, username, meal_time FROM meals 
-                  WHERE MONTH(meal_time) = :month AND YEAR(meal_time) = :year 
-                    AND LOWER(TRIM(username)) != 'admin'
-                  ORDER BY meal_time DESC";
+        // Fetch meals for the selected month and year ordered by date (newest first, excluding admin) with user avatar
+        $query = "SELECT m.id, m.user_id, m.username, m.meal_time, u.avatar FROM meals m
+                  LEFT JOIN users u ON m.user_id = u.id OR LOWER(TRIM(m.username)) = LOWER(TRIM(u.username))
+                  WHERE MONTH(m.meal_time) = :month AND YEAR(m.meal_time) = :year 
+                    AND LOWER(TRIM(m.username)) != 'admin'
+                  ORDER BY m.meal_time DESC";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':month', $month, PDO::PARAM_INT);
         $stmt->bindParam(':year', $year, PDO::PARAM_INT);
@@ -38,7 +39,8 @@ try {
                 "id" => (int)$row['id'],
                 "user_id" => (int)$row['user_id'],
                 "username" => $row['username'],
-                "meal_time" => $row['meal_time']
+                "meal_time" => $row['meal_time'],
+                "avatar" => $row['avatar']
             ];
         }
 

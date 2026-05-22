@@ -9,12 +9,22 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import Constants from 'expo-constants';
+import { userService } from '@/services/api';
 
 export default function AccountScreen() {
   const theme = useTheme();
-  const { username, user, logout } = useAuth();
+  const { username, user, token, logout, updateUser } = useAuth();
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.avatar) {
+      setAvatarUri(user.avatar);
+    } else {
+      setAvatarUri(null);
+    }
+  }, [user]);
 
   const isFocused = useIsFocused();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -25,26 +35,59 @@ export default function AccountScreen() {
     }
   }, [isFocused]);
 
+  const uploadAvatar = async (localUri: string) => {
+    if (!token || !user) return;
+    
+    try {
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = reader.result as string;
+        
+        try {
+          const result = await userService.changeAvatar(base64Data);
+          if (result.success) {
+            Alert.alert('Success', 'Avatar updated successfully.');
+            updateUser({
+              ...user,
+              avatar: base64Data,
+            });
+          } else {
+            Alert.alert('Error', result.message || 'Failed to update avatar.');
+          }
+        } catch (err: any) {
+          Alert.alert('Error', 'Connection error: ' + (err.message || err));
+        }
+      };
+      
+      reader.readAsDataURL(blob);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to process image: ' + e.message);
+    }
+  };
+
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.7,
     });
 
-    if (!result.canceled) {
-      setAvatarUri(result.assets[0].uri);
+    if (!result.canceled && result.assets && result.assets[0]) {
+      const uri = result.assets[0].uri;
+      setAvatarUri(uri);
+      await uploadAvatar(uri);
     }
   };
-
-
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill all password fields.');
       return;
@@ -53,10 +96,29 @@ export default function AccountScreen() {
       Alert.alert('Error', 'New password and confirm password do not match.');
       return;
     }
-    Alert.alert('Success', 'Password changed successfully!');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    
+    if (!token) {
+      Alert.alert('Error', 'Not authenticated.');
+      return;
+    }
+
+    try {
+      const data = await userService.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+
+      if (data.success) {
+        Alert.alert('Success', 'Password changed successfully!');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        Alert.alert('Error', data.message || 'Failed to change password.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', 'Connection error: ' + (err.message || err));
+    }
   };
 
   return (

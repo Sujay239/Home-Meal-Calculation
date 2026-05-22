@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
+import { StyleSheet, View, Pressable, ScrollView, useColorScheme, Modal, ActivityIndicator, Alert, Platform, Image } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { subscribeToPurchaseUpdates } from '@/hooks/use-shared-data';
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { homeService, mealService } from '@/services/api';
 
 const USER_COLORS: Record<string, string> = {
   'sujay': '#6366f1',
@@ -21,20 +22,6 @@ const USER_COLORS: Record<string, string> = {
 };
 
 const getUserColor = (name: string) => USER_COLORS[name.toLowerCase().trim()] || '#64748b';
-
-const getBaseUrl = () => {
-  let host = '10.229.201.77';
-  if (Platform.OS === 'web') {
-    host = 'localhost';
-  } else {
-    const hostUri = Constants.expoConfig?.hostUri || '';
-    const uriHost = hostUri.split(':')[0];
-    if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-      host = uriHost;
-    }
-  }
-  return `http://${host}:8000`;
-};
 
 interface UserAggregation {
   id: number;
@@ -81,24 +68,16 @@ export default function HomeScreen() {
     try {
       const month = currentDate.getMonth() + 1; // 1-indexed
       const year = currentDate.getFullYear();
-      const baseUrl = getBaseUrl();
       
-      const response = await fetch(`${baseUrl}/backend/api/home_data.php?month=${month}&year=${year}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await homeService.getHomeData({ month, year });
+      if (data.success) {
         setDashboardData(data);
       } else {
         setFetchError(data.message || 'Failed to fetch ledger data.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Fetch dashboard data error:', err);
-      setFetchError('Cannot connect to calculation server. Please ensure the backend is running.');
+      setFetchError(err.message || 'Cannot connect to calculation server. Please ensure the backend is running.');
     } finally {
       setIsLoadingData(false);
     }
@@ -142,25 +121,19 @@ export default function HomeScreen() {
     setModalVisible(false);
     setIsLoadingData(true);
     try {
-      const baseUrl = getBaseUrl();
-      const response = await fetch(`${baseUrl}/backend/api/meals.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ username }),
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
+      if (!username) {
+        Alert.alert('Error', 'Username not found.');
+        return;
+      }
+      const data = await mealService.logMeal({ username });
+      if (data.success) {
         fetchDashboardData();
       } else {
         Alert.alert('Error', data.message || 'Failed to log meal.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Log meal error:', err);
-      Alert.alert('Error', 'Cannot connect to server. Please try again.');
+      Alert.alert('Error', err.message || 'Cannot connect to server. Please try again.');
     } finally {
       setIsLoadingData(false);
     }
@@ -179,6 +152,7 @@ export default function HomeScreen() {
         name: u.username,
         meals: u.meals,
         expenses: u.expenses,
+        avatar: u.avatar,
       }))
       .filter(u => {
         // Exclude if meal = 0, expense = 0, and settlement (rounded payment) = 0
@@ -198,6 +172,7 @@ export default function HomeScreen() {
         name: username || 'User',
         meals: 0,
         expenses: 0,
+        avatar: null,
       };
     }
     return {
@@ -205,6 +180,7 @@ export default function HomeScreen() {
       name: dashboardData.currentUser.username,
       meals: dashboardData.currentUser.meals,
       expenses: dashboardData.currentUser.expenses,
+      avatar: dashboardData.currentUser.avatar,
     };
   }, [dashboardData, username]);
 
@@ -385,8 +361,16 @@ export default function HomeScreen() {
                   <View style={styles.userRow}>
                     
                     <View style={styles.userInfo}>
-                      <View style={[styles.avatar, { backgroundColor: getUserColor(user.name) }]}>
-                        <ThemedText type="smallBold" style={{ color: '#fff' }}>{user.name.charAt(0)}</ThemedText>
+                      <View style={styles.avatar}>
+                        {user.avatar ? (
+                          <Image source={{ uri: user.avatar }} style={styles.avatarImg} />
+                        ) : (
+                          <View style={[styles.avatarFallback, { backgroundColor: getUserColor(user.name) }]}>
+                            <ThemedText type="smallBold" style={{ color: '#fff' }}>
+                              {user.name.charAt(0).toUpperCase()}
+                            </ThemedText>
+                          </View>
+                        )}
                       </View>
                       <View style={styles.userDetails}>
                         <ThemedText type="default" style={styles.username}>{user.name}</ThemedText>
@@ -634,6 +618,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  avatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   userDetails: {
     flex: 1,

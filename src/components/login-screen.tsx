@@ -23,6 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { ThemedText } from './themed-text';
+import { authService } from '@/services/api';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -62,37 +63,9 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     setIsSubmitting(true);
 
     try {
-      // Dynamically resolve backend base URL:
-      // - Web uses localhost:8000
-      // - Physical mobile device connected on LAN resolves computer's local Wi-Fi IP
-      // - Emulators resolve local Wi-Fi host IP or fallback IP
-      let host = '10.229.201.77';
-      if (Platform.OS === 'web') {
-        host = 'localhost';
-      } else {
-        const hostUri = Constants.expoConfig?.hostUri || '';
-        const uriHost = hostUri.split(':')[0];
-        if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-          host = uriHost;
-        }
-      }
-      const baseUrl = `http://${host}:8000`;
-      console.log(`[Login] Attempting network request to: ${baseUrl}/backend/api/login.php`);
+      const data = await authService.login(username.trim(), password);
 
-      const response = await fetch(`${baseUrl}/backend/api/login.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: username.trim(),
-          password: password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (data.success) {
         // Animate card fading out before success callback
         cardOpacity.value = withTiming(0, { duration: 300 }, (isFinished) => {
           if (isFinished) {
@@ -103,10 +76,10 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         shakeCard();
         setError(data.message || 'Invalid username or password.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login request error:', err);
       shakeCard();
-      setError('Cannot connect to authentication server. Please ensure the backend is running.');
+      setError(err.message || 'Cannot connect to authentication server. Please ensure the backend is running.');
     } finally {
       setIsSubmitting(false);
     }

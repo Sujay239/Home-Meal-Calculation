@@ -12,6 +12,20 @@ require_once __DIR__ . '/../config/database.php';
 // Protect route - enforce valid JWT authentication
 $currentUserClaims = requireAuth();
 
+$currentUsername = '';
+$currentUserId = 0;
+$currentUserRole = '';
+
+if (is_array($currentUserClaims)) {
+    $currentUsername = isset($currentUserClaims['username']) ? $currentUserClaims['username'] : '';
+    $currentUserId = isset($currentUserClaims['id']) ? $currentUserClaims['id'] : 0;
+    $currentUserRole = isset($currentUserClaims['role']) ? $currentUserClaims['role'] : '';
+} elseif (is_object($currentUserClaims)) {
+    $currentUsername = isset($currentUserClaims->username) ? $currentUserClaims->username : '';
+    $currentUserId = isset($currentUserClaims->id) ? $currentUserClaims->id : 0;
+    $currentUserRole = isset($currentUserClaims->role) ? $currentUserClaims->role : '';
+}
+
 try {
     $database = new Database();
     $db = $database->getConnection();
@@ -27,8 +41,16 @@ try {
     }
 
     // Accept month and year parameters (defaulting to the current month & year)
-    $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
-    $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+    $month = isset($_GET['month']) && is_numeric($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
+    $year = isset($_GET['year']) && is_numeric($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+
+    // Enforce strict bounds validation to prevent SQL Date range failures
+    if ($month < 1 || $month > 12) {
+        $month = (int)date('m');
+    }
+    if ($year < 2000 || $year > 2100) {
+        $year = (int)date('Y');
+    }
 
     // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
     $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
@@ -123,7 +145,7 @@ try {
         $usersData[] = $userItem;
 
         // Check if this matches the logged-in user
-        if (strtolower(trim($uName)) === strtolower(trim($currentUserClaims['username']))) {
+        if (strtolower(trim($uName)) === strtolower(trim($currentUsername))) {
             $currentUserDashboardData = $userItem;
         }
     }
@@ -132,9 +154,9 @@ try {
     // create a default record so the app doesn't crash
     if ($currentUserDashboardData === null) {
         $currentUserDashboardData = [
-            "id" => (int)$currentUserClaims['id'],
-            "username" => $currentUserClaims['username'],
-            "role" => $currentUserClaims['role'],
+            "id" => (int)$currentUserId,
+            "username" => $currentUsername,
+            "role" => $currentUserRole,
             "avatar" => null,
             "expenses" => 0.0,
             "meals" => 0
@@ -154,7 +176,7 @@ try {
     ]);
     exit();
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([
         "success" => false,

@@ -7,10 +7,14 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { LoginScreen } from '@/components/login-screen';
 import { CustomTabBar } from '@/components/custom-tab-bar';
 import { useAuth } from '@/hooks/use-auth';
+import { useRoommates } from '@/hooks/use-shared-data';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { isAuthenticated, isLoading, login } = useAuth();
+  
+  // Eagerly fetch master data in the background once authenticated
+  useRoommates();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -92,15 +92,16 @@ export function useAuth() {
   }, []);
 
   const login = async (token: string, user: User) => {
+    const jwtToken = token || 'dummy_token';
     try {
-      await Storage.setItem('auth_token', token);
+      await Storage.setItem('auth_token', jwtToken);
       await Storage.setItem('auth_user', JSON.stringify(user));
       
       currentAuthState = {
         isAuthenticated: true,
         username: user.username,
         user,
-        token,
+        token: jwtToken,
         isLoading: false,
       };
       notifySubscribers();

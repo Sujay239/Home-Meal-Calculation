@@ -12,6 +12,13 @@ require_once __DIR__ . '/../config/database.php';
 // Protect route - enforce valid JWT authentication
 $currentUser = requireAuth();
 
+$currentUserId = 0;
+if (is_array($currentUser) && isset($currentUser['id'])) {
+    $currentUserId = (int)$currentUser['id'];
+} elseif (is_object($currentUser) && isset($currentUser->id)) {
+    $currentUserId = (int)$currentUser->id;
+}
+
 try {
     $database = new Database();
     $db = $database->getConnection();
@@ -54,7 +61,7 @@ try {
             $query = "UPDATE users SET avatar = :avatar WHERE id = :id";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':avatar', $avatar);
-            $stmt->bindParam(':id', $currentUser['id'], PDO::PARAM_INT);
+            $stmt->bindParam(':id', $currentUserId, PDO::PARAM_INT);
             
             if ($stmt->execute()) {
                 http_response_code(200);
@@ -84,7 +91,7 @@ try {
             // Fetch stored password hash for current user
             $query = "SELECT password FROM users WHERE id = :id LIMIT 1";
             $stmt = $db->prepare($query);
-            $stmt->bindParam(':id', $currentUser['id'], PDO::PARAM_INT);
+            $stmt->bindParam(':id', $currentUserId, PDO::PARAM_INT);
             $stmt->execute();
             
             if ($stmt->rowCount() === 0) {
@@ -115,7 +122,7 @@ try {
             $updateQuery = "UPDATE users SET password = :password WHERE id = :id";
             $updateStmt = $db->prepare($updateQuery);
             $updateStmt->bindParam(':password', $newHash);
-            $updateStmt->bindParam(':id', $currentUser['id'], PDO::PARAM_INT);
+            $updateStmt->bindParam(':id', $currentUserId, PDO::PARAM_INT);
 
             if ($updateStmt->execute()) {
                 http_response_code(200);
@@ -145,7 +152,7 @@ try {
         ]);
     }
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([
         "success" => false,

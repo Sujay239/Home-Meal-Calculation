@@ -19,16 +19,23 @@ try {
 
     if ($method === 'GET') {
         // Accept month and year parameters (defaulting to the current month & year)
-        $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
-        $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+        $month = isset($_GET['month']) && is_numeric($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
+        $year = isset($_GET['year']) && is_numeric($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+
+        // Enforce strict bounds validation to prevent SQL Date range failures
+        if ($month < 1 || $month > 12) {
+            $month = (int)date('m');
+        }
+        if ($year < 2000 || $year > 2100) {
+            $year = (int)date('Y');
+        }
 
         // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
         $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
         $end_date = date("Y-m-t 23:59:59", strtotime($start_date));
 
-        // Fetch meals for the selected month and year ordered by date (newest first, excluding admin) with user avatar
-        $query = "SELECT m.id, m.user_id, m.username, m.meal_time, u.avatar FROM meals m
-                  LEFT JOIN users u ON m.user_id = u.id OR m.username = u.username
+        // Fetch meals for the selected month and year ordered by date (newest first, excluding admin)
+        $query = "SELECT m.id, m.user_id, m.username, m.meal_time FROM meals m
                   WHERE m.meal_time BETWEEN :start_date AND :end_date 
                     AND LOWER(TRIM(m.username)) != 'admin'
                   ORDER BY m.meal_time DESC";
@@ -43,8 +50,7 @@ try {
                 "id" => (int)$row['id'],
                 "user_id" => (int)$row['user_id'],
                 "username" => $row['username'],
-                "meal_time" => $row['meal_time'],
-                "avatar" => $row['avatar']
+                "meal_time" => $row['meal_time']
             ];
         }
 
@@ -113,7 +119,7 @@ try {
         ]);
     }
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([
         "success" => false,

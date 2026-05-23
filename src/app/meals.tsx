@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import Constants from 'expo-constants';
 import { mealService } from '@/services/api';
+import { useRoommates } from '@/hooks/use-shared-data';
 
 // --- TYPES ---
 type Meal = {
@@ -41,6 +42,7 @@ export default function MealsScreen() {
   const theme = useTheme();
   const colorScheme = useColorScheme();
   const { username, token } = useAuth();
+  const { roommates, getAvatar } = useRoommates();
 
   // --- Month Navigation ---
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -74,7 +76,6 @@ export default function MealsScreen() {
           id: m.id,
           username: m.username,
           date: new Date(m.meal_time.replace(' ', 'T')),
-          avatar: m.avatar,
         }));
         setMeals(fetchedMeals);
       } else {
@@ -94,32 +95,10 @@ export default function MealsScreen() {
     }
   }, [currentDate, token, isFocused]);
 
-  // Create mapping of username -> avatar
-  const userAvatars = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    meals.forEach(m => {
-      const key = m.username.toLowerCase().trim();
-      if (m.avatar && !map[key]) {
-        map[key] = m.avatar;
-      }
-    });
-    return map;
-  }, [meals]);
-
-  // Get unique usernames
+  // Get unique usernames from cached roommates list
   const uniqueUsers = useMemo(() => {
-    const seen = new Set<string>();
-    const names: string[] = [];
-    meals.forEach(m => {
-      const trimmed = m.username.trim();
-      const lower = trimmed.toLowerCase();
-      if (trimmed && !seen.has(lower)) {
-        seen.add(lower);
-        names.push(trimmed);
-      }
-    });
-    return ['All', ...names];
-  }, [meals]);
+    return ['All', ...roommates.map(r => r.username)];
+  }, [roommates]);
 
   const isCurrentMonth = () => {
     const now = new Date();
@@ -203,7 +182,7 @@ export default function MealsScreen() {
               {uniqueUsers.map(user => {
                 const isActive = selectedUser.toLowerCase().trim() === user.toLowerCase().trim();
                 const chipColor = user === 'All' ? '#6366f1' : getUserColor(user);
-                const avatarUri = user === 'All' ? null : userAvatars[user.toLowerCase().trim()];
+                const avatarUri = user === 'All' ? null : getAvatar(user);
                 return (
                   <Pressable
                     key={user}
@@ -287,8 +266,8 @@ export default function MealsScreen() {
                     <View key={item.id}>
                       <View style={styles.mealRow}>
                         <View style={styles.mealAvatar}>
-                          {item.avatar ? (
-                            <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
+                          {getAvatar(item.username) ? (
+                            <Image source={{ uri: getAvatar(item.username)! }} style={styles.avatarImg} />
                           ) : (
                             <View style={[styles.avatarFallback, { backgroundColor: getUserColor(item.username) }]}>
                               <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>

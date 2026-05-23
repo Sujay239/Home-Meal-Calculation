@@ -6,7 +6,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { subscribeToPurchaseUpdates } from '@/hooks/use-shared-data';
+import { subscribeToPurchaseUpdates, useRoommates } from '@/hooks/use-shared-data';
 import Constants from 'expo-constants';
 import { purchaseService } from '@/services/api';
 
@@ -36,6 +36,7 @@ export default function PurchasesScreen() {
   const theme = useTheme();
   const colorScheme = useColorScheme();
   const { username, token } = useAuth();
+  const { roommates, getAvatar } = useRoommates();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +72,6 @@ export default function PurchasesScreen() {
           product: p.product,
           price: p.price,
           date: new Date(p.purchase_date.replace(' ', 'T')),
-          avatar: p.avatar,
         }));
         setPurchases(fetchedPurchases);
       } else {
@@ -99,32 +99,10 @@ export default function PurchasesScreen() {
     return unsubscribe;
   }, [token]);
 
-  // Create mapping of username -> avatar
-  const userAvatars = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    purchases.forEach(p => {
-      const key = p.username.toLowerCase().trim();
-      if (p.avatar && !map[key]) {
-        map[key] = p.avatar;
-      }
-    });
-    return map;
-  }, [purchases]);
-
-  // Get unique usernames
+  // Get unique usernames from cached roommates list
   const uniqueUsers = useMemo(() => {
-    const seen = new Set<string>();
-    const names: string[] = [];
-    purchases.forEach(p => {
-      const trimmed = p.username.trim();
-      const lower = trimmed.toLowerCase();
-      if (trimmed && !seen.has(lower)) {
-        seen.add(lower);
-        names.push(trimmed);
-      }
-    });
-    return ['All', ...names];
-  }, [purchases]);
+    return ['All', ...roommates.map(r => r.username)];
+  }, [roommates]);
 
   const isCurrentMonth = () => {
     const now = new Date();
@@ -213,7 +191,7 @@ export default function PurchasesScreen() {
               {uniqueUsers.map(user => {
                 const isActive = selectedUser.toLowerCase().trim() === user.toLowerCase().trim();
                 const chipColor = user === 'All' ? '#6366f1' : getUserColor(user);
-                const avatarUri = user === 'All' ? null : userAvatars[user.toLowerCase().trim()];
+                const avatarUri = user === 'All' ? null : getAvatar(user);
                 return (
                   <Pressable
                     key={user}
@@ -322,8 +300,8 @@ export default function PurchasesScreen() {
                     <View key={item.id}>
                       <View style={styles.purchaseRow}>
                         <View style={styles.purchaseAvatar}>
-                          {item.avatar ? (
-                            <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
+                          {getAvatar(item.username) ? (
+                            <Image source={{ uri: getAvatar(item.username)! }} style={styles.avatarImg} />
                           ) : (
                             <View style={[styles.avatarFallback, { backgroundColor: getUserColor(item.username) }]}>
                               <ThemedText style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>

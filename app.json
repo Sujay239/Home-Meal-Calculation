@@ -35,6 +35,14 @@
             "imageWidth": 200
           }
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
@@ -44,9 +52,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "954c6af8-7e29-4832-ae77-0e59619d258e"
+        "projectId": "1ffc6e23-7744-4595-aa0c-911dc2cb1093"
       }
     },
-    "owner": "sujaykotal"
+    "owner": "xpritamjoarder"
   }
 }

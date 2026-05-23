@@ -9,6 +9,7 @@
     "ajv": "^8.20.0",
     "axios": "^1.16.1",
     "expo": "^54.0.34",
+    "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-font": "~14.0.11",

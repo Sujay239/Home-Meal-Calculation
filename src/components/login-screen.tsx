@@ -17,7 +17,6 @@ import Animated, {
   withTiming,
   withSequence,
   Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -64,14 +63,14 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
     try {
       const data = await authService.login(username.trim(), password);
+      console.log('[Login Screen] Authentication response data:', JSON.stringify(data));
 
       if (data.success) {
         // Animate card fading out before success callback
-        cardOpacity.value = withTiming(0, { duration: 300 }, (isFinished) => {
-          if (isFinished) {
-            runOnJS(onLoginSuccess)(data.token, data.user);
-          }
-        });
+        cardOpacity.value = withTiming(0, { duration: 300 });
+        setTimeout(() => {
+          onLoginSuccess(data.token, data.user);
+        }, 300);
       } else {
         shakeCard();
         setError(data.message || 'Invalid username or password.');

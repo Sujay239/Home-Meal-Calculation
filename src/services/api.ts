@@ -31,7 +31,7 @@ const getBaseUrl = () => {
     return `http://${DEVELOPMENT_LAN_IP}:8000`;
   }
   // Production API Endpoint (InfinityFree Host)
-  return 'http://kolkata-room.gamer.gd';
+  return 'https://kolkata-room.gamer.gd';
 };
 
 const API_BASE_URL = getBaseUrl();
@@ -62,7 +62,7 @@ apiClient.interceptors.request.use(
     // 1. Inject the bypass cookie for InfinityFree if applicable
     if (config.baseURL?.includes('gamer.gd') || config.url?.includes('gamer.gd')) {
       try {
-        const cookie = await getBypassCookie(config.baseURL || 'http://kolkata-room.gamer.gd');
+        const cookie = await getBypassCookie(config.baseURL || 'https://kolkata-room.gamer.gd');
         if (cookie) {
           config.headers['Cookie'] = `__test=${cookie}`;
           // Store the cookie value used for this request to track stale cookie failures

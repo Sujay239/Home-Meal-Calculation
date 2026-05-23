@@ -22,15 +22,19 @@ try {
         $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
         $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
+        // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
+        $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+        $end_date = date("Y-m-t 23:59:59", strtotime($start_date));
+
         // Fetch purchases for the selected month and year ordered by date (newest first, excluding admin) with user avatar
         $query = "SELECT p.id, p.user_id, p.username, p.product, p.price, p.purchase_date, u.avatar FROM purchases p 
-                  LEFT JOIN users u ON p.user_id = u.id OR LOWER(TRIM(p.username)) = LOWER(TRIM(u.username))
-                  WHERE MONTH(p.purchase_date) = :month AND YEAR(p.purchase_date) = :year 
+                  LEFT JOIN users u ON p.user_id = u.id OR p.username = u.username
+                  WHERE p.purchase_date BETWEEN :start_date AND :end_date 
                     AND LOWER(TRIM(p.username)) != 'admin'
                   ORDER BY p.purchase_date DESC";
         $stmt = $db->prepare($query);
-        $stmt->bindParam(':month', $month, PDO::PARAM_INT);
-        $stmt->bindParam(':year', $year, PDO::PARAM_INT);
+        $stmt->bindParam(':start_date', $start_date);
+        $stmt->bindParam(':end_date', $end_date);
         $stmt->execute();
         
         $purchases = [];

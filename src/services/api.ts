@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { Storage } from '@/utils/storage';
-import { getBypassCookie } from '@/utils/challengeSolver';
+import { getBypassCookie, clearBypassCookie } from '@/utils/challengeSolver';
 
 // --------------------------------------------------------------
 // 1. Dynamic API Base URL Configuration
@@ -49,7 +49,13 @@ const apiClient = axios.create({
 });
 
 // --------------------------------------------------------------
-// 3. Request Interceptor (Cookie Bypass & JWT Injection)
+// 3. Transparent GET Response Cache
+// --------------------------------------------------------------
+const apiCache: Record<string, { data: any; expiry: number }> = {};
+const CACHE_TTL_MS = 5000; // 5 seconds
+
+// --------------------------------------------------------------
+// 4. Request Interceptor (Cookie Bypass, JWT, & Caching)
 // --------------------------------------------------------------
 apiClient.interceptors.request.use(
   async (config) => {
@@ -59,6 +65,8 @@ apiClient.interceptors.request.use(
         const cookie = await getBypassCookie(config.baseURL || 'http://kolkata-room.gamer.gd');
         if (cookie) {
           config.headers['Cookie'] = `__test=${cookie}`;
+          // Store the cookie value used for this request to track stale cookie failures
+          (config as any)._cookieUsed = cookie;
         }
       } catch (cookieError) {
         console.warn('[API Client] Cookie bypass failed:', cookieError);
@@ -81,6 +89,32 @@ apiClient.interceptors.request.use(
       console.error('[API Client] Token retrieval error:', error);
     }
 
+    // 3. Handle Cache Lookup for GET requests
+    if (config.method?.toLowerCase() === 'get') {
+      const cacheKey = `${config.url}?${JSON.stringify(config.params || {})}`;
+      const cached = apiCache[cacheKey];
+      const now = Date.now();
+      const bypassCache = config.headers?.['Cache-Control'] === 'no-cache' || config.headers?.['Pragma'] === 'no-cache';
+
+      if (cached && cached.expiry > now && !bypassCache) {
+        if (__DEV__) {
+          console.log(`[API Client] Serve from cache -> ${config.url}`);
+        }
+        const source = axios.CancelToken.source();
+        config.cancelToken = source.token;
+        source.cancel(JSON.stringify({ isCacheHit: true, data: cached.data }));
+        return config;
+      }
+    } else {
+      // Invalidate cache on mutations (POST, PUT, DELETE)
+      if (__DEV__) {
+        console.log(`[API Client] Mutation detected (${config.method?.toUpperCase()} -> ${config.url}). Invalidating cache.`);
+      }
+      for (const key in apiCache) {
+        delete apiCache[key];
+      }
+    }
+
     if (__DEV__) {
       console.log(`[API Request] ${config.method?.toUpperCase()} -> ${config.baseURL}${config.url}`);
     }
@@ -92,16 +126,87 @@ apiClient.interceptors.request.use(
 );
 
 // --------------------------------------------------------------
-// 4. Response Interceptor (Global Error Handling)
+// 5. Response Interceptor (Global Error Handling & Cache Caching)
 // --------------------------------------------------------------
 apiClient.interceptors.response.use(
-  (response) => {
+  async (response) => {
     if (__DEV__) {
       console.log(`[API Response] Success from ${response.config.url}`);
     }
+
+    // Check if the response is actually the InfinityFree challenge page (HTML string containing slowAES)
+    if (
+      typeof response.data === 'string' &&
+      (response.data.includes('slowAES.decrypt') || response.data.includes('toNumbers') || response.data.includes('__test'))
+    ) {
+      if (__DEV__) {
+        console.warn('[API Client] Detected security challenge page in response instead of expected JSON.');
+      }
+      clearBypassCookie((response.config as any)._cookieUsed);
+      
+      // Reject so that the error handler can catch and retry this request
+      return Promise.reject({
+        config: response.config,
+        message: 'Security challenge detected',
+        status: 307,
+        response: response,
+      });
+    }
+
+    // Cache the response if it is a successful GET request
+    const config = response.config;
+    if (config.method?.toLowerCase() === 'get') {
+      const cacheKey = `${config.url}?${JSON.stringify(config.params || {})}`;
+      apiCache[cacheKey] = {
+        data: response.data,
+        expiry: Date.now() + CACHE_TTL_MS,
+      };
+    }
+
     return response.data;
   },
-  (error) => {
+  async (error) => {
+    // Check if error is a cancelled request due to a cache hit
+    if (axios.isCancel(error)) {
+      try {
+        const cancelData = JSON.parse(error.message || '{}');
+        if (cancelData.isCacheHit) {
+          return Promise.resolve(cancelData.data);
+        }
+      } catch (e) {
+        // Not a cache hit cancellation
+      }
+    }
+
+    const config = error.config;
+
+    // Determine if the error is related to the security challenge or a network drop
+    const isNetworkOrChallengeError =
+      error.message === 'Network Error' ||
+      error.message === 'Security challenge detected' ||
+      error.status === 307 ||
+      error.response?.status === 307 ||
+      error.response?.status === 403;
+
+    if (isNetworkOrChallengeError) {
+      clearBypassCookie(config ? (config as any)._cookieUsed : undefined);
+
+      // Retry the request once if it hasn't been retried yet
+      if (config && !config._retry) {
+        config._retry = true;
+        if (__DEV__) {
+          console.log(`[API Client] Clearing cookie and retrying failed request: ${config.url}`);
+        }
+        
+        try {
+          // Re-run the request. The request interceptor will automatically solve and inject the new cookie.
+          return await apiClient(config);
+        } catch (retryError) {
+          return Promise.reject(retryError);
+        }
+      }
+    }
+
     const errorMsg = error.response?.data?.message || error.message || 'An unknown network error occurred';
 
     if (__DEV__) {
@@ -109,7 +214,7 @@ apiClient.interceptors.response.use(
     }
 
     return Promise.reject({
-      status: error.response?.status,
+      status: error.response?.status || error.status,
       message: errorMsg,
       data: error.response?.data,
       originalError: error,

@@ -30,24 +30,28 @@ try {
     $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
     $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
+    // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
+    $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+    $end_date = date("Y-m-t 23:59:59", strtotime($start_date));
+
     // 1. Fetch total spent globally in the selected month & year (excluding admin)
     $spentQuery = "SELECT COALESCE(SUM(price), 0) as total_spent FROM purchases 
-                   WHERE MONTH(purchase_date) = :month AND YEAR(purchase_date) = :year
+                   WHERE purchase_date BETWEEN :start_date AND :end_date
                      AND LOWER(TRIM(username)) != 'admin'";
     $spentStmt = $db->prepare($spentQuery);
-    $spentStmt->bindParam(':month', $month, PDO::PARAM_INT);
-    $spentStmt->bindParam(':year', $year, PDO::PARAM_INT);
+    $spentStmt->bindParam(':start_date', $start_date);
+    $spentStmt->bindParam(':end_date', $end_date);
     $spentStmt->execute();
     $spentRow = $spentStmt->fetch();
     $globalTotalSpent = (float)$spentRow['total_spent'];
 
     // 2. Fetch total meals globally in the selected month & year (excluding admin)
     $mealsQuery = "SELECT COUNT(*) as total_meals FROM meals 
-                   WHERE MONTH(meal_time) = :month AND YEAR(meal_time) = :year
+                   WHERE meal_time BETWEEN :start_date AND :end_date
                      AND LOWER(TRIM(username)) != 'admin'";
     $mealsStmt = $db->prepare($mealsQuery);
-    $mealsStmt->bindParam(':month', $month, PDO::PARAM_INT);
-    $mealsStmt->bindParam(':year', $year, PDO::PARAM_INT);
+    $mealsStmt->bindParam(':start_date', $start_date);
+    $mealsStmt->bindParam(':end_date', $end_date);
     $mealsStmt->execute();
     $mealsRow = $mealsStmt->fetch();
     $globalTotalMeals = (int)$mealsRow['total_meals'];
@@ -56,51 +60,70 @@ try {
     $perMealCost = $globalTotalMeals > 0 ? $globalTotalSpent / $globalTotalMeals : 0.0;
 
     // 3. Fetch roommate-wise aggregation dynamically (excluding admin)
-    // We select all users, and for each, aggregate their purchases and meals in the selected month & year
-    // We use LOWER(TRIM(p.username)) = LOWER(TRIM(u.username)) to handle database seeding variations safely
-    $usersQuery = "SELECT u.id, u.username, u.role, u.avatar,
-                  (
-                      SELECT COALESCE(SUM(p.price), 0) 
-                      FROM purchases p 
-                      WHERE LOWER(TRIM(p.username)) = LOWER(TRIM(u.username)) 
-                        AND MONTH(p.purchase_date) = :month_p 
-                        AND YEAR(p.purchase_date) = :year_p
-                  ) as expenses,
-                  (
-                      SELECT COUNT(*) 
-                      FROM meals m 
-                      WHERE LOWER(TRIM(m.username)) = LOWER(TRIM(u.username)) 
-                        AND MONTH(m.meal_time) = :month_m 
-                        AND YEAR(m.meal_time) = :year_m
-                  ) as meals
-                  FROM users u
-                  WHERE LOWER(TRIM(u.username)) != 'admin'
-                  ORDER BY u.username ASC";
-                  
+    // Avoid running 2 * N nested subqueries by selecting total expenses and meals grouped by user first
+    // This reduces database operations from 17 full scans to just 3 index-friendly queries!
+    
+    // Get expenses per user
+    $expQuery = "SELECT username, SUM(price) as total_price 
+                 FROM purchases 
+                 WHERE purchase_date BETWEEN :start_p AND :end_p 
+                 AND LOWER(TRIM(username)) != 'admin'
+                 GROUP BY username";
+    $expStmt = $db->prepare($expQuery);
+    $expStmt->bindParam(':start_p', $start_date);
+    $expStmt->bindParam(':end_p', $end_date);
+    $expStmt->execute();
+    $expensesMap = [];
+    while ($row = $expStmt->fetch()) {
+        $key = strtolower(trim($row['username']));
+        $expensesMap[$key] = (float)$row['total_price'];
+    }
+
+    // Get meals per user
+    $mealsCountQuery = "SELECT username, COUNT(*) as total_meals 
+                        FROM meals 
+                        WHERE meal_time BETWEEN :start_m AND :end_m 
+                          AND LOWER(TRIM(username)) != 'admin'
+                        GROUP BY username";
+    $mealsCountStmt = $db->prepare($mealsCountQuery);
+    $mealsCountStmt->bindParam(':start_m', $start_date);
+    $mealsCountStmt->bindParam(':end_m', $end_date);
+    $mealsCountStmt->execute();
+    $mealsMap = [];
+    while ($row = $mealsCountStmt->fetch()) {
+        $key = strtolower(trim($row['username']));
+        $mealsMap[$key] = (int)$row['total_meals'];
+    }
+
+    // Fetch active users list
+    $usersQuery = "SELECT id, username, role, avatar FROM users 
+                   WHERE LOWER(TRIM(username)) != 'admin' 
+                   ORDER BY username ASC";
     $usersStmt = $db->prepare($usersQuery);
-    $usersStmt->bindParam(':month_p', $month, PDO::PARAM_INT);
-    $usersStmt->bindParam(':year_p', $year, PDO::PARAM_INT);
-    $usersStmt->bindParam(':month_m', $month, PDO::PARAM_INT);
-    $usersStmt->bindParam(':year_m', $year, PDO::PARAM_INT);
     $usersStmt->execute();
 
     $usersData = [];
     $currentUserDashboardData = null;
 
     while ($row = $usersStmt->fetch()) {
+        $uName = $row['username'];
+        $key = strtolower(trim($uName));
+        $userExpenses = isset($expensesMap[$key]) ? $expensesMap[$key] : 0.0;
+        $userMeals = isset($mealsMap[$key]) ? $mealsMap[$key] : 0;
+
         $userItem = [
             "id" => (int)$row['id'],
-            "username" => $row['username'],
+            "username" => $uName,
             "role" => $row['role'],
             "avatar" => $row['avatar'],
-            "expenses" => (float)$row['expenses'],
-            "meals" => (int)$row['meals']
+            "expenses" => $userExpenses,
+            "meals" => $userMeals
         ];
         
         $usersData[] = $userItem;
 
         // Check if this matches the logged-in user
-        if (strtolower(trim($row['username'])) === strtolower(trim($currentUserClaims['username']))) {
+        if (strtolower(trim($uName)) === strtolower(trim($currentUserClaims['username']))) {
             $currentUserDashboardData = $userItem;
         }
     }

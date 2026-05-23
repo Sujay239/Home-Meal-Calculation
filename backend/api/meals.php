@@ -22,15 +22,19 @@ try {
         $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
         $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
+        // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
+        $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+        $end_date = date("Y-m-t 23:59:59", strtotime($start_date));
+
         // Fetch meals for the selected month and year ordered by date (newest first, excluding admin) with user avatar
         $query = "SELECT m.id, m.user_id, m.username, m.meal_time, u.avatar FROM meals m
-                  LEFT JOIN users u ON m.user_id = u.id OR LOWER(TRIM(m.username)) = LOWER(TRIM(u.username))
-                  WHERE MONTH(m.meal_time) = :month AND YEAR(m.meal_time) = :year 
+                  LEFT JOIN users u ON m.user_id = u.id OR m.username = u.username
+                  WHERE m.meal_time BETWEEN :start_date AND :end_date 
                     AND LOWER(TRIM(m.username)) != 'admin'
                   ORDER BY m.meal_time DESC";
         $stmt = $db->prepare($query);
-        $stmt->bindParam(':month', $month, PDO::PARAM_INT);
-        $stmt->bindParam(':year', $year, PDO::PARAM_INT);
+        $stmt->bindParam(':start_date', $start_date);
+        $stmt->bindParam(':end_date', $end_date);
         $stmt->execute();
         
         $meals = [];

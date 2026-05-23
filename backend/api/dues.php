@@ -21,14 +21,18 @@ try {
         $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('m');
         $year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
 
+        // Calculate date ranges to allow index usage (avoiding MONTH() / YEAR() full table scans)
+        $start_date = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+        $end_date = date("Y-m-t 23:59:59", strtotime($start_date));
+
         // Fetch settlements for the selected month and year ordered by date (newest first, excluding admin)
         $query = "SELECT id, username, lender_name, amount, updated_at FROM dues 
-                  WHERE MONTH(updated_at) = :month AND YEAR(updated_at) = :year 
+                  WHERE updated_at BETWEEN :start_date AND :end_date 
                     AND LOWER(TRIM(username)) != 'admin' AND LOWER(TRIM(lender_name)) != 'admin'
                   ORDER BY updated_at DESC";
         $stmt = $db->prepare($query);
-        $stmt->bindParam(':month', $month, PDO::PARAM_INT);
-        $stmt->bindParam(':year', $year, PDO::PARAM_INT);
+        $stmt->bindParam(':start_date', $start_date);
+        $stmt->bindParam(':end_date', $end_date);
         $stmt->execute();
         
         $dues = [];

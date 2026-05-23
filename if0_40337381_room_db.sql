@@ -1082,21 +1082,27 @@ INSERT INTO `users` (`id`, `username`, `password`, `role`) VALUES
 -- Indexes for table `dues`
 --
 ALTER TABLE `dues`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `updated_at` (`updated_at`),
+  ADD KEY `username` (`username`);
 
 --
 -- Indexes for table `meals`
 --
 ALTER TABLE `meals`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `meal_time` (`meal_time`),
+  ADD KEY `username` (`username`);
 
 --
 -- Indexes for table `purchases`
 --
 ALTER TABLE `purchases`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `purchase_date` (`purchase_date`),
+  ADD KEY `username` (`username`);
 
 --
 -- Indexes for table `users`

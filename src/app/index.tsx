@@ -158,7 +158,7 @@ export default function HomeScreen() {
         // Exclude if meal = 0, expense = 0, and settlement (rounded payment) = 0
         const fairShare = perMealCost * u.meals;
         const rawPayment = fairShare - u.expenses;
-        const roundedPayment = Math.floor(rawPayment);
+        const roundedPayment = Math.round(rawPayment);
         
         return u.meals !== 0 || u.expenses !== 0 || roundedPayment !== 0;
       });
@@ -309,6 +309,26 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* My Total Meal Cost */}
+        <View style={[styles.perMealRow, { backgroundColor: theme.backgroundElement, marginTop: 12 }]}>
+          <View style={styles.perMealHeader}>
+            <View style={[styles.perMealIconBadge, { backgroundColor: colorScheme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fdf2f8' }]}>
+              <MaterialIcons name="restaurant-menu" size={22} color="#ec4899" />
+            </View>
+            <View style={{ marginLeft: 14 }}>
+              <ThemedText type="default" style={{ fontWeight: '700', color: theme.text, fontSize: 16 }}>My Meal Cost</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                {currentUser.meals} meals × ₹{Math.round(perMealCost)}
+              </ThemedText>
+            </View>
+          </View>
+          <View style={[styles.perMealValueBadge, { backgroundColor: colorScheme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fdf2f8' }]}>
+            <ThemedText style={{ fontSize: 24, fontWeight: '800', color: '#ec4899' }}>
+              ₹{Math.round(currentUser.meals * perMealCost)}
+            </ThemedText>
+          </View>
+        </View>
+
         {/* 4. Users List Section */}
         <View style={styles.usersSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Settlements</ThemedText>
@@ -317,7 +337,7 @@ export default function HomeScreen() {
           {(() => {
             const myFairShare = perMealCost * currentUser.meals;
             const myRawPayment = myFairShare - currentUser.expenses;
-            const myRoundedPayment = Math.floor(myRawPayment);
+            const myRoundedPayment = Math.round(myRawPayment);
             const myIsPaying = myRoundedPayment >= 0;
             const myAmount = Math.abs(myRoundedPayment);
             const accentColor = myIsPaying ? '#ef4444' : '#2ed573';
@@ -351,7 +371,7 @@ export default function HomeScreen() {
               // Calculation: per meal cost * total meals by the user floor that value - total expenses of that user
               const fairShare = perMealCost * user.meals;
               const rawPayment = fairShare - user.expenses;
-              const roundedPayment = Math.floor(rawPayment);
+              const roundedPayment = Math.round(rawPayment);
               
               const isPaying = roundedPayment >= 0;
               const amountDisplay = Math.abs(roundedPayment);

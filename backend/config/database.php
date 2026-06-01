@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Asia/Kolkata');
+
 class Database {
     private $host = "sql210.infinityfree.com";
     private $db_name = "if0_41989865_home";
@@ -44,6 +46,7 @@ class Database {
                     $password,
                     $options
                 );
+                $this->conn->exec("SET time_zone = '+05:30'");
                 return $this->conn;
             } catch (PDOException $exception) {
                 $last_exception = $exception;
@@ -91,6 +94,7 @@ class Database {
                 $password,
                 $options
             );
+            $this->conn->exec("SET time_zone = '+05:30'");
         } catch (PDOException $exception) {
             throw $exception;
         }

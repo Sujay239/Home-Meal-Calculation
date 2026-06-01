@@ -7,34 +7,8 @@ import { getBypassCookie, clearBypassCookie } from '@/utils/challengeSolver';
 // --------------------------------------------------------------
 // 1. Dynamic API Base URL Configuration
 // --------------------------------------------------------------
-// For local development on physical devices, update this with your computer's LAN IP address!
-const DEVELOPMENT_LAN_IP = '10.229.201.238'; 
-
-// Set this to true to test the app using your hosted server (e.g. kolkata-room.gamer.gd).
-// Set this to false if you are running the backend server locally using XAMPP or run_backend.bat.
-const USE_PRODUCTION_IN_DEV = true;
-
-
-
-const getBaseUrl = () => {
-  if (__DEV__ && !USE_PRODUCTION_IN_DEV) {
-    // If running in the web browser locally
-    if (Platform.OS === 'web') {
-      return 'http://localhost/Home-Meal-Calculation/backend';
-    }
-    // Fallback logic for emulators & physical devices
-    const hostUri = Constants.expoConfig?.hostUri || '';
-    const uriHost = hostUri.split(':')[0];
-    if (uriHost && !uriHost.includes('exp.direct') && !uriHost.includes('ngrok')) {
-      return `http://${uriHost}:8000`;
-    }
-    return `http://${DEVELOPMENT_LAN_IP}:8000`;
-  }
-  // Production API Endpoint (InfinityFree Host)
-  return 'https://kolkata-room.gamer.gd';
-};
-
-const API_BASE_URL = getBaseUrl();
+// Production API Endpoint (InfinityFree Host)
+const API_BASE_URL = 'https://kolkata-room.gamer.gd';
 
 // --------------------------------------------------------------
 // 2. Create Axios Instance
@@ -45,6 +19,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
   },
 });
 

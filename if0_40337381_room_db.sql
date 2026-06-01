@@ -1050,6 +1050,19 @@ INSERT INTO `purchases` (`id`, `user_id`, `username`, `product`, `price`, `purch
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `water_logs`
+--
+
+CREATE TABLE `water_logs` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `username` varchar(50) NOT NULL,
+  `log_time` datetime NOT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -1105,6 +1118,15 @@ ALTER TABLE `purchases`
   ADD KEY `username` (`username`);
 
 --
+-- Indexes for table `water_logs`
+--
+ALTER TABLE `water_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `log_time` (`log_time`),
+  ADD KEY `username` (`username`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -1138,6 +1160,12 @@ ALTER TABLE `purchases`
 --
 ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
+-- AUTO_INCREMENT for table `water_logs`
+--
+ALTER TABLE `water_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 COMMIT;
 
 ALTER TABLE users MODIFY COLUMN avatar LONGTEXT DEFAULT NULL

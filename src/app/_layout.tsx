@@ -52,6 +52,14 @@ export default function TabLayout() {
                 title: 'Meals',
               }}
             />
+
+            <Tabs.Screen
+              name="dues"
+              options={{
+                title: 'Dues',
+                href: null,
+              }}
+            />
             <Tabs.Screen
               name="account"
               options={{

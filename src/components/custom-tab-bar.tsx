@@ -97,6 +97,11 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
 
+        // Skip rendering this tab if options.href is explicitly set to null, or if it is 'dues'
+        if (route.name === 'dues' || ((options as any).href === null && route.name !== 'cart')) {
+          return null;
+        }
+
         const onPress = () => {
           const event = navigation.emit({
             type: 'tabPress',

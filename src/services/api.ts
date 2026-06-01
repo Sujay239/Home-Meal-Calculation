@@ -248,12 +248,35 @@ export const purchaseService = {
   },
 };
 
+export const waterLogService = {
+  /**
+   * Fetch recent water purchases log
+   */
+  getLogs: async (params?: { month?: number; year?: number }): Promise<any> => {
+    return apiClient.get('/api/water_logs.php', { params });
+  },
+
+  /**
+   * Log a new water purchase event
+   */
+  logWater: async (): Promise<any> => {
+    return apiClient.post('/api/water_logs.php');
+  },
+};
+
+
 export const duesService = {
   /**
    * Calculate shared balances and dues
    */
   getDues: async (params?: { month?: number; year?: number }): Promise<any> => {
     return apiClient.get('/api/dues.php', { params });
+  },
+  logDue: async (data: { subject: string; amount: number; type: 'give' | 'receive'; other_user: string }): Promise<any> => {
+    return apiClient.post('/api/dues.php', data);
+  },
+  deleteDue: async (id: number): Promise<any> => {
+    return apiClient.delete('/api/dues.php', { params: { id } });
   },
 };
 

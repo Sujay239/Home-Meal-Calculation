@@ -8,6 +8,7 @@ import { LoginScreen } from '@/components/login-screen';
 import { CustomTabBar } from '@/components/custom-tab-bar';
 import { useAuth } from '@/hooks/use-auth';
 import { useRoommates } from '@/hooks/use-shared-data';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -15,6 +16,9 @@ export default function TabLayout() {
   
   // Eagerly fetch master data in the background once authenticated
   useRoommates();
+  
+  // Register for push notifications
+  usePushNotifications();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -135,11 +135,40 @@ try {
                 throw new Exception("Failed to update password in database.");
             }
 
+        } elseif ($action === 'update_push_token') {
+            $pushToken = isset($data['push_token']) ? trim($data['push_token']) : '';
+
+            if (empty($pushToken)) {
+                http_response_code(400);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Push token is required."
+                ]);
+                exit();
+            }
+
+            // Update user push_token in DB
+            $query = "UPDATE users SET push_token = :push_token WHERE id = :id";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(':push_token', $pushToken);
+            $stmt->bindParam(':id', $currentUserId, PDO::PARAM_INT);
+            
+            if ($stmt->execute()) {
+                http_response_code(200);
+                echo json_encode([
+                    "success" => true,
+                    "message" => "Push token updated successfully."
+                ]);
+                exit();
+            } else {
+                throw new Exception("Failed to update push token in database.");
+            }
+
         } else {
             http_response_code(400);
             echo json_encode([
                 "success" => false,
-                "message" => "Invalid or missing action. Allowed actions: 'change_avatar', 'change_password'."
+                "message" => "Invalid or missing action. Allowed actions: 'change_avatar', 'change_password', 'update_push_token'."
             ]);
             exit();
         }

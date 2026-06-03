@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Meal Calculation",
-    "slug": "meal-calculation",
+    "name": "Home",
+    "slug": "home",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -12,6 +12,11 @@
     },
     "android": {
       "package": "com.sujay.mealcalculation",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#208AEF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -26,6 +31,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -52,9 +58,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "1ffc6e23-7744-4595-aa0c-911dc2cb1093"
+        "projectId": "db05e179-1196-4489-8e8f-b45063e73722"
       }
     },
-    "owner": "xpritamjoarder"
+    "owner": "sujaykumarkotal"
   }
 }

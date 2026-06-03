@@ -7,8 +7,13 @@ import { getBypassCookie, clearBypassCookie } from '@/utils/challengeSolver';
 // --------------------------------------------------------------
 // 1. Dynamic API Base URL Configuration
 // --------------------------------------------------------------
-// Production API Endpoint (InfinityFree Host)
-const API_BASE_URL = 'https://kolkata-room.gamer.gd';
+// Direct server URL (blocked by many Indian mobile ISPs)
+// const API_BASE_URL = 'https://kolkata-room.gamer.gd';
+//
+// PROXY URL: Deploy the Cloudflare Worker from /proxy/worker.js
+// then paste your Worker URL below. See /proxy/README.md for instructions.
+// Example: 'https://meal-api-proxy.YOUR_SUBDOMAIN.workers.dev'
+const API_BASE_URL = 'https://meal-api-proxy.sujaykumarkotal49.workers.dev';
 
 // --------------------------------------------------------------
 // 2. Create Axios Instance
@@ -19,7 +24,6 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
   },
 });
 
@@ -34,18 +38,17 @@ const CACHE_TTL_MS = 5000; // 5 seconds
 // --------------------------------------------------------------
 apiClient.interceptors.request.use(
   async (config) => {
-    // 1. Inject the bypass cookie for InfinityFree if applicable
-    if (config.baseURL?.includes('gamer.gd') || config.url?.includes('gamer.gd')) {
-      try {
-        const cookie = await getBypassCookie(config.baseURL || 'https://kolkata-room.gamer.gd');
-        if (cookie) {
-          config.headers['Cookie'] = `__test=${cookie}`;
-          // Store the cookie value used for this request to track stale cookie failures
-          (config as any)._cookieUsed = cookie;
-        }
-      } catch (cookieError) {
-        console.warn('[API Client] Cookie bypass failed:', cookieError);
+    // 1. Inject the bypass cookie for InfinityFree challenge
+    // Always inject regardless of domain (needed when using a proxy like Cloudflare Workers)
+    try {
+      const cookie = await getBypassCookie(config.baseURL || API_BASE_URL);
+      if (cookie) {
+        config.headers['Cookie'] = `__test=${cookie}`;
+        // Store the cookie value used for this request to track stale cookie failures
+        (config as any)._cookieUsed = cookie;
       }
+    } catch (cookieError) {
+      console.warn('[API Client] Cookie bypass failed:', cookieError);
     }
 
     // 2. Inject JWT token
@@ -119,7 +122,20 @@ apiClient.interceptors.response.use(
       }
       clearBypassCookie((response.config as any)._cookieUsed);
       
-      // Reject so that the error handler can catch and retry this request
+      const config = response.config;
+      if (config && !(config as any)._retry) {
+        (config as any)._retry = true;
+        if (__DEV__) {
+          console.log(`[API Client] Retrying request after solving challenge: ${config.url}`);
+        }
+        try {
+          return await apiClient(config);
+        } catch (retryError) {
+          return Promise.reject(retryError);
+        }
+      }
+
+      // If already retried or config missing, reject
       return Promise.reject({
         config: response.config,
         message: 'Security challenge detected',
@@ -155,26 +171,20 @@ apiClient.interceptors.response.use(
 
     const config = error.config;
 
-    // Determine if the error is related to the security challenge or a network drop
-    const isNetworkOrChallengeError =
-      error.message === 'Network Error' ||
-      error.message === 'Security challenge detected' ||
-      error.status === 307 ||
-      error.response?.status === 307 ||
-      error.response?.status === 403;
+    // Determine if the error is a network drop
+    const isNetworkError = error.message === 'Network Error' || error.status === 307 || error.response?.status === 307 || error.response?.status === 403;
 
-    if (isNetworkOrChallengeError) {
+    if (isNetworkError) {
       clearBypassCookie(config ? (config as any)._cookieUsed : undefined);
 
       // Retry the request once if it hasn't been retried yet
-      if (config && !config._retry) {
-        config._retry = true;
+      if (config && !(config as any)._retry) {
+        (config as any)._retry = true;
         if (__DEV__) {
-          console.log(`[API Client] Clearing cookie and retrying failed request: ${config.url}`);
+          console.log(`[API Client] Retrying failed request due to network drop: ${config.url}`);
         }
         
         try {
-          // Re-run the request. The request interceptor will automatically solve and inject the new cookie.
           return await apiClient(config);
         } catch (retryError) {
           return Promise.reject(retryError);
@@ -182,7 +192,12 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const errorMsg = error.response?.data?.message || error.message || 'An unknown network error occurred';
+    let errorMsg = error.response?.data?.message || error.message || 'An unknown network error occurred';
+
+    // Enhance Network Error message to help debug ISP blocking issues
+    if (errorMsg === 'Network Error') {
+      errorMsg = 'Network Error: Cannot connect to the server. Your mobile network (e.g. Jio/Airtel) might be blocking the server domain. Try using Wi-Fi or a VPN.';
+    }
 
     if (__DEV__) {
       console.warn(`[API Error] Details:`, error.response?.data || error.message);

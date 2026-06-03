@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "898881746231",
+    "project_id": "home-e1cae",
+    "storage_bucket": "home-e1cae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898881746231:android:5fa6e8a1037041301a16b2",
+        "android_client_info": {
+          "package_name": "com.sujay.mealcalculation"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-te3Zbwkgpi85tjK_hDF1dZLXgEAfDVc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
